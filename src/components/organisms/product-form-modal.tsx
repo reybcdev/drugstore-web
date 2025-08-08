@@ -1,227 +1,303 @@
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { X, Save } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { DatePickerInput } from '@/components/ui/date-picker';
-import { productSchema, type ProductFormData } from '@/schemas/product-schema.ts';
-import { useInventoryStore } from '@/stores/inventory-store.ts';
-import { useCreateProduct, useUpdateProduct } from '@/hooks/use-inventory.ts';
-import type { Product } from '@/types/inventory.ts';
+import { useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { z } from 'zod'
+import { Product, ProductFormData } from '../../types/inventory'
+import { inventoryApi } from '../../services/api'
 
 interface ProductFormModalProps {
-  readonly product?: Product | null;
+  /** Product to edit (null if creating new) */
+  readonly product: Product | null;
+  /** Modal open state */
+  readonly isOpen: boolean;
+  /** Handler for closing the modal */
+  readonly onClose: () => void;
 }
 
-export const ProductFormModal = ({ product }: ProductFormModalProps) => {
-  const { closeForm } = useInventoryStore();
-  const createProductMutation = useCreateProduct();
-  const updateProductMutation = useUpdateProduct();
+// Zod schema for form validation
+const productFormSchema = z.object({
+  name: z.string().min(1, 'Product name is required'),
+  description: z.string().min(1, 'Description is required'),
+  stockQuantity: z.number().int().min(0, 'Stock quantity must be 0 or higher'),
+  price: z.number().positive('Price must be greater than 0'),
+  expiryDate: z.string().min(1, 'Expiry date is required'),
+  category: z.string().min(1, 'Category is required'),
+  supplier: z.string().min(1, 'Supplier is required'),
+  minimumStockThreshold: z.number().int().min(1, 'Minimum stock threshold must be at least 1')
+})
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-    reset,
-    watch,
-    setValue,
+/**
+ * Modal form for creating or editing products
+ * @param props - Component props
+ * @returns Form modal component
+ */
+function ProductFormModal({ product, isOpen, onClose }: ProductFormModalProps): JSX.Element | null {
+  const queryClient = useQueryClient()
+  const isEditMode = !!product
+  
+  // Initialize form with react-hook-form
+  const { 
+    register, 
+    handleSubmit, 
+    reset, 
+    formState: { errors } 
   } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema),
-    defaultValues: product
-      ? {
-          name: product.name,
-          description: product.description || '',
-          price: product.price,
-          stockQuantity: product.stockQuantity,
-          category: product.category,
-          supplier: product.supplier,
-          expiryDate: product.expiryDate,
-        }
-      : undefined,
-  });
-
-  const onSubmit = async (data: ProductFormData) => {
-    try {
-      if (product) {
-        await updateProductMutation.mutateAsync({
-          id: product.id,
-          product: {
-            name: data.name,
-            description: data.description || '',
-            price: data.price,
-            stockQuantity: data.stockQuantity,
-            category: data.category,
-            supplier: data.supplier,
-            expiryDate: data.expiryDate,
-          },
-        });
-      } else {
-        await createProductMutation.mutateAsync({
-          name: data.name,
-          description: data.description || '',
-          price: data.price,
-          stockQuantity: data.stockQuantity,
-          category: data.category,
-          supplier: data.supplier,
-          expiryDate: data.expiryDate,
-        });
-      }
-      reset();
-      closeForm();
-    } catch (error) {
-      console.error('Error saving product:', error);
+    resolver: zodResolver(productFormSchema),
+    defaultValues: isEditMode ? {
+      name: product.name,
+      description: product.description,
+      stockQuantity: product.stockQuantity,
+      price: product.price,
+      expiryDate: product.expiryDate.split('T')[0], // Format date for input
+      category: product.category,
+      supplier: product.supplier,
+      minimumStockThreshold: product.minimumStockThreshold
+    } : {
+      name: '',
+      description: '',
+      stockQuantity: 0,
+      price: 0,
+      expiryDate: '',
+      category: '',
+      supplier: '',
+      minimumStockThreshold: 10
     }
-  };
+  })
 
-  const handleClose = () => {
-    reset();
-    closeForm();
-  };
+  // Reset form when product changes
+  useEffect(() => {
+    if (isOpen) {
+      reset(isEditMode ? {
+        name: product.name,
+        description: product.description,
+        stockQuantity: product.stockQuantity,
+        price: product.price,
+        expiryDate: product.expiryDate.split('T')[0],
+        category: product.category,
+        supplier: product.supplier,
+        minimumStockThreshold: product.minimumStockThreshold
+      } : {
+        name: '',
+        description: '',
+        stockQuantity: 0,
+        price: 0,
+        expiryDate: '',
+        category: '',
+        supplier: '',
+        minimumStockThreshold: 10
+      })
+    }
+  }, [isOpen, product, reset, isEditMode])
 
-  if (!product) return null;
+  // Create product mutation
+  const createMutation = useMutation({
+    mutationFn: (data: ProductFormData) => inventoryApi.createProduct(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      onClose()
+    }
+  })
+
+  // Update product mutation
+  const updateMutation = useMutation({
+    mutationFn: (data: ProductFormData) => 
+      inventoryApi.updateProduct(product?.id || 0, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      onClose()
+    }
+  })
+
+  /**
+   * Handle form submission
+   * @param data - Form data
+   */
+  const onSubmit = (data: ProductFormData): void => {
+    if (isEditMode) {
+      updateMutation.mutate(data)
+    } else {
+      createMutation.mutate(data)
+    }
+  }
+
+  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            {product ? 'Edit Product' : 'Add New Product'}
-          </h3>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClose}
-            className="h-8 w-8 p-0"
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">
+            {isEditMode ? 'Edit Product' : 'Add New Product'}
+          </h2>
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
           >
-            <X className="h-4 w-4" />
-          </Button>
+            &times;
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <Label htmlFor="name">Product Name *</Label>
-            <Input
-              id="name"
-              {...register('name')}
-              className="mt-1"
-              placeholder="Enter product name"
-            />
-            {errors.name && (
-              <p className="text-red-600 text-sm mt-1">{errors.name.message}</p>
-            )}
-          </div>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Name */}
+            <div className="mb-4">
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                Product Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                {...register('name')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              {errors.name && (
+                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+              )}
+            </div>
 
-          <div>
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              {...register('description')}
-              className="mt-1"
-              rows={3}
-              placeholder="Enter product description"
-            />
-            {errors.description && (
-              <p className="text-red-600 text-sm mt-1">{errors.description.message}</p>
-            )}
-          </div>
+            {/* Category */}
+            <div className="mb-4">
+              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+                Category
+              </label>
+              <input
+                id="category"
+                type="text"
+                {...register('category')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              {errors.category && (
+                <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>
+              )}
+            </div>
 
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label htmlFor="price">Price *</Label>
-              <Input
+            {/* Stock Quantity */}
+            <div className="mb-4">
+              <label htmlFor="stockQuantity" className="block text-sm font-medium text-gray-700 mb-1">
+                Stock Quantity
+              </label>
+              <input
+                id="stockQuantity"
+                type="number"
+                min="0"
+                {...register('stockQuantity', { valueAsNumber: true })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              {errors.stockQuantity && (
+                <p className="mt-1 text-sm text-red-600">{errors.stockQuantity.message}</p>
+              )}
+            </div>
+
+            {/* Price */}
+            <div className="mb-4">
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
+                Price ($)
+              </label>
+              <input
                 id="price"
                 type="number"
                 step="0.01"
+                min="0"
                 {...register('price', { valueAsNumber: true })}
-                className="mt-1"
-                placeholder="0.00"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               />
               {errors.price && (
-                <p className="text-red-600 text-sm mt-1">{errors.price.message}</p>
+                <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>
               )}
             </div>
 
-            <div className="flex-1">
-              <Label htmlFor="stockQuantity">Stock Quantity *</Label>
-              <Input
-                id="stockQuantity"
-                type="number"
-                {...register('stockQuantity', { valueAsNumber: true })}
-                className="mt-1"
-                placeholder="0"
+            {/* Expiry Date */}
+            <div className="mb-4">
+              <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-1">
+                Expiry Date
+              </label>
+              <input
+                id="expiryDate"
+                type="date"
+                {...register('expiryDate')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
               />
-              {errors.stockQuantity && (
-                <p className="text-red-600 text-sm mt-1">{errors.stockQuantity.message}</p>
+              {errors.expiryDate && (
+                <p className="mt-1 text-sm text-red-600">{errors.expiryDate.message}</p>
+              )}
+            </div>
+
+            {/* Supplier */}
+            <div className="mb-4">
+              <label htmlFor="supplier" className="block text-sm font-medium text-gray-700 mb-1">
+                Supplier
+              </label>
+              <input
+                id="supplier"
+                type="text"
+                {...register('supplier')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              {errors.supplier && (
+                <p className="mt-1 text-sm text-red-600">{errors.supplier.message}</p>
+              )}
+            </div>
+
+            {/* Minimum Stock Threshold */}
+            <div className="mb-4">
+              <label htmlFor="minimumStockThreshold" className="block text-sm font-medium text-gray-700 mb-1">
+                Min Stock Threshold
+              </label>
+              <input
+                id="minimumStockThreshold"
+                type="number"
+                min="1"
+                {...register('minimumStockThreshold', { valueAsNumber: true })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              />
+              {errors.minimumStockThreshold && (
+                <p className="mt-1 text-sm text-red-600">{errors.minimumStockThreshold.message}</p>
               )}
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="category">Category *</Label>
-            <Input
-              id="category"
-              {...register('category')}
-              className="mt-1"
-              placeholder="e.g., Antibiotics, Vitamins"
+          {/* Description */}
+          <div className="mb-4">
+            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+              Description
+            </label>
+            <textarea
+              id="description"
+              rows={3}
+              {...register('description')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
-            {errors.category && (
-              <p className="text-red-600 text-sm mt-1">{errors.category.message}</p>
+            {errors.description && (
+              <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
             )}
           </div>
 
-          <div>
-            <Label htmlFor="supplier">Supplier *</Label>
-            <Input
-              id="supplier"
-              {...register('supplier')}
-              className="mt-1"
-              placeholder="Enter supplier name"
-            />
-            {errors.supplier && (
-              <p className="text-red-600 text-sm mt-1">{errors.supplier.message}</p>
-            )}
-          </div>
-
-          <div>
-            <Label htmlFor="expiryDate">Expiry Date *</Label>
-            <DatePickerInput
-              value={watch('expiryDate') || ''}
-              onChange={(date) => {
-                setValue('expiryDate', date, { 
-                  shouldValidate: true,
-                  shouldDirty: true 
-                });
-              }}
-              className="mt-1 w-full"
-              placeholder="Select expiry date"
-            />
-            {errors.expiryDate && (
-              <p className="text-red-600 text-sm mt-1">{errors.expiryDate.message}</p>
-            )}
-          </div>
-
+          {/* Form Actions */}
           <div className="flex justify-end space-x-3 mt-6">
-            <Button
+            <button
               type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={isSubmitting}
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
             >
               Cancel
-            </Button>
-            <Button
+            </button>
+            <button
               type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-2"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md"
             >
-              <Save className="h-4 w-4" />
-              {isSubmitting ? 'Saving...' : product ? 'Update' : 'Create'}
-            </Button>
+              {createMutation.isPending || updateMutation.isPending
+                ? 'Saving...'
+                : isEditMode
+                ? 'Update Product'
+                : 'Add Product'}
+            </button>
           </div>
         </form>
       </div>
     </div>
-  );
-};
+  )
+}
+
+export default ProductFormModal

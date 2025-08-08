@@ -1,139 +1,99 @@
-import { useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Store, Package } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import type { Product, ProductFiltersOptions } from './types/inventory';
-import ProductList from './components/organisms/product-list';
-import ProductForm from './components/organisms/product-form';
-import ProductFilters from './components/molecules/product-filters';
-import { DeleteConfirmationModal } from './components/organisms/delete-confirmation-modal';
-import { useInventoryStore } from './stores/inventory-store';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      retry: 1,
-    },
-  },
-});
+import { useState } from 'react'
+import ProductList from './components/organisms/product-list'
+import ProductFormModal from './components/organisms/product-form-modal'
+import DeleteConfirmationModal from './components/organisms/delete-confirmation-modal'
+import { Product } from './types/inventory'
 
 /**
- * Main application component for drugstore inventory management
+ * Main application component that manages the inventory system UI
+ * @returns The root application component
  */
-const App: React.FC = () => {
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [filters, setFilters] = useState<ProductFiltersOptions>({});
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
-  // Use Zustand store for delete modal state
-  const { isDeleteDialogOpen, openDeleteDialog } = useInventoryStore();
+function App(): JSX.Element {
+  const [isFormModalOpen, setIsFormModalOpen] = useState<boolean>(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false)
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null)
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null)
 
   /**
-   * Opens the product form for adding a new product
+   * Opens the form modal for creating a new product
    */
   const handleAddProduct = (): void => {
-    setSelectedProduct(null);
-    setShowForm(true);
-  };
+    setProductToEdit(null)
+    setIsFormModalOpen(true)
+  }
 
   /**
-   * Opens the product form for editing an existing product
+   * Opens the form modal for editing an existing product
+   * @param product - The product to edit
    */
   const handleEditProduct = (product: Product): void => {
-    setSelectedProduct(product);
-    setShowForm(true);
-  };
+    setProductToEdit(product)
+    setIsFormModalOpen(true)
+  }
 
   /**
-   * Opens the delete confirmation modal
+   * Opens the delete confirmation modal for a product
+   * @param product - The product to delete
    */
-  const handleDeleteProduct = (id: number): void => {
-    openDeleteDialog(id);
-  };
+  const handleDeleteClick = (product: Product): void => {
+    setProductToDelete(product)
+    setIsDeleteModalOpen(true)
+  }
 
   /**
-   * Closes the product form
+   * Closes the form modal
    */
-  const handleCloseForm = (): void => {
-    setShowForm(false);
-    setSelectedProduct(null);
-  };
+  const handleCloseFormModal = (): void => {
+    setIsFormModalOpen(false)
+    setProductToEdit(null)
+  }
 
   /**
-   * Handles successful product save
+   * Closes the delete confirmation modal
    */
-  const handleSaveProduct = (): void => {
-    setRefreshTrigger(prev => prev + 1);
-  };
-
-  /**
-   * Renders the application header
-   */
-  const renderHeader = () => (
-    <header className="bg-white shadow-sm border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center">
-            <Store className="h-8 w-8 text-blue-600 mr-3" />
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">
-                Drugstore Inventory Management
-              </h1>
-              <p className="text-sm text-gray-500">
-                Manage your pharmacy inventory efficiently
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-sm text-green-600 font-medium">
-              API Connected
-            </div>
-            <Button
-              onClick={handleAddProduct}
-              className="flex items-center"
-            >
-              <Package className="h-4 w-4 mr-2" />
-              Add Product
-            </Button>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
+  const handleCloseDeleteModal = (): void => {
+    setIsDeleteModalOpen(false)
+    setProductToDelete(null)
+  }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-gray-50">
-        {renderHeader()}
-        
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <ProductFilters
-            filters={filters}
-            onFiltersChange={setFilters}
-          />
-          
-          <ProductList
-            onEditProduct={handleEditProduct}
-            onDeleteProduct={handleDeleteProduct}
-            filters={filters}
-            refreshTrigger={refreshTrigger}
-          />
-        </main>
+    <div className="container mx-auto p-4">
+      <header className="mb-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Pharmacy Inventory System</h1>
+          <button
+            onClick={handleAddProduct}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Add Product
+          </button>
+        </div>
+      </header>
 
-        {showForm && (
-          <ProductForm
-            product={selectedProduct}
-            onClose={handleCloseForm}
-            onSave={handleSaveProduct}
-          />
-        )}
+      <main>
+        <ProductList 
+          onEdit={handleEditProduct} 
+          onDelete={handleDeleteClick} 
+        />
+      </main>
 
-        {isDeleteDialogOpen && <DeleteConfirmationModal />}
-      </div>
-    </QueryClientProvider>
-  );
-};
+      {isFormModalOpen && (
+        <ProductFormModal 
+          product={productToEdit} 
+          isOpen={isFormModalOpen} 
+          onClose={handleCloseFormModal} 
+        />
+      )}
 
-export default App;
+      {isDeleteModalOpen && productToDelete && (
+        <DeleteConfirmationModal 
+          product={productToDelete} 
+          isOpen={isDeleteModalOpen} 
+          onClose={handleCloseDeleteModal} 
+        />
+      )}
+    </div>
+  )
+}
+
+export default App

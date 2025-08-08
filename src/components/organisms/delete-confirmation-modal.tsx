@@ -1,55 +1,73 @@
-import { AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useInventoryStore } from '@/stores/inventory-store.ts';
-import { useDeleteProduct } from '@/hooks/use-inventory.ts';
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Product } from '../../types/inventory'
+import { inventoryApi } from '../../services/api'
 
-export const DeleteConfirmationModal = () => {
-  const { isDeleteDialogOpen, productToDelete, closeDeleteDialog } = useInventoryStore();
-  const deleteProduct = useDeleteProduct();
+interface DeleteConfirmationModalProps {
+  /** Product to be deleted */
+  readonly product: Product;
+  /** Modal open state */
+  readonly isOpen: boolean;
+  /** Handler for closing the modal */
+  readonly onClose: () => void;
+}
 
-  const handleConfirmDelete = async () => {
-    if (productToDelete) {
-      try {
-        await deleteProduct.mutateAsync(productToDelete);
-      } catch (error) {
-        console.error('Error deleting product:', error);
-      }
+/**
+ * Modal for confirming product deletion
+ * @param props - Component props
+ * @returns Delete confirmation modal component
+ */
+function DeleteConfirmationModal({ 
+  product, 
+  isOpen, 
+  onClose 
+}: DeleteConfirmationModalProps): JSX.Element | null {
+  const queryClient = useQueryClient()
+  
+  // Delete product mutation
+  const deleteMutation = useMutation({
+    mutationFn: (productId: number) => inventoryApi.deleteProduct(productId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      onClose()
     }
-  };
+  })
 
-  if (!isDeleteDialogOpen || !productToDelete) return null;
+  /**
+   * Handle delete confirmation
+   */
+  const handleConfirmDelete = (): void => {
+    deleteMutation.mutate(product.id)
+  }
+
+  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div className="mt-3 text-center">
-          <AlertTriangle className="mx-auto h-12 w-12 text-red-500" />
-          <h3 className="text-lg font-medium text-gray-900 mt-4">
-            Delete Product
-          </h3>
-          <div className="mt-2 px-7 py-3">
-            <p className="text-sm text-gray-500">
-              Are you sure you want to delete this product? This action cannot be undone.
-            </p>
-          </div>
-          <div className="flex justify-center space-x-3 mt-4">
-            <Button
-              variant="outline"
-              onClick={closeDeleteDialog}
-              disabled={deleteProduct.isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmDelete}
-              disabled={deleteProduct.isPending}
-            >
-              {deleteProduct.isPending ? 'Deleting...' : 'Delete'}
-            </Button>
-          </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h2 className="text-xl font-semibold mb-4">Confirm Deletion</h2>
+        
+        <p className="mb-6">
+          Are you sure you want to delete the product "{product.name}"? This action cannot be undone.
+        </p>
+        
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirmDelete}
+            disabled={deleteMutation.isPending}
+            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md"
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete Product'}
+          </button>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
+
+export default DeleteConfirmationModal

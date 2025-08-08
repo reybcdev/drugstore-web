@@ -1,80 +1,134 @@
-import axios from 'axios';
-import type { Product, NewProduct } from '../types/inventory';
-import { 
-  transformApiProduct, 
-  transformNewProductToApi, 
-  transformProductToApi 
-} from '../lib/transformers';
+import axios from 'axios'
+import { Product, ProductFormData } from '../types/inventory'
+import { camelToSnake, snakeToCamel } from '../lib/utils'
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+// API base URL configuration
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
-const api = axios.create({
+// Axios instance with common configuration
+const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
-  },
-});
+    'Content-Type': 'application/json'
+  }
+})
 
 /**
- * Inventory API service for managing products
+ * Transforms snake_case response data to camelCase
+ * @param data - Data to transform
+ * @returns Transformed data with camelCase keys
+ */
+const transformResponseData = (data: Record<string, any>): Record<string, any> => {
+  return Object.entries(data).reduce((acc, [key, value]) => {
+    acc[snakeToCamel(key)] = value
+    return acc
+  }, {} as Record<string, any>)
+}
+
+/**
+ * Transforms camelCase request data to snake_case
+ * @param data - Data to transform
+ * @returns Transformed data with snake_case keys
+ */
+const transformRequestData = (data: Record<string, any>): Record<string, any> => {
+  return Object.entries(data).reduce((acc, [key, value]) => {
+    acc[camelToSnake(key)] = value
+    return acc
+  }, {} as Record<string, any>)
+}
+
+/**
+ * API service for inventory operations
  */
 export const inventoryApi = {
   /**
-   * Retrieves all products from the inventory
+   * Fetches all products with optional filters
+   * @param params - Optional query parameters
+   * @returns Promise with products
    */
-  getProducts: async (): Promise<Product[]> => {
-    const response = await api.get('/products/');
-    return response.data.map(transformApiProduct);
+  getProducts: async (params?: Record<string, string>): Promise<Product[]> => {
+    try {
+      const response = await apiClient.get('/inventory/products/', { params })
+      return response.data.map(transformResponseData) as Product[]
+    } catch (error) {
+      console.error('Error fetching products:', error)
+      throw error
+    }
   },
 
   /**
-   * Retrieves a single product by ID
+   * Fetches a single product by ID
+   * @param id - Product ID
+   * @returns Promise with product details
    */
-  getProduct: async (id: number): Promise<Product> => {
-    const response = await api.get(`/products/${id}/`);
-    return transformApiProduct(response.data);
+  getProductById: async (id: number): Promise<Product> => {
+    try {
+      const response = await apiClient.get(`/inventory/products/${id}/`)
+      return transformResponseData(response.data) as Product
+    } catch (error) {
+      console.error(`Error fetching product ${id}:`, error)
+      throw error
+    }
   },
 
   /**
-   * Creates a new product in the inventory
+   * Creates a new product
+   * @param productData - Product data to create
+   * @returns Promise with created product
    */
-  createProduct: async (product: NewProduct): Promise<Product> => {
-    const apiProduct = transformNewProductToApi(product);
-    const response = await api.post('/products/', apiProduct);
-    return transformApiProduct(response.data);
+  createProduct: async (productData: ProductFormData): Promise<Product> => {
+    try {
+      const transformedData = transformRequestData(productData as unknown as Record<string, any>)
+      const response = await apiClient.post('/inventory/products/', transformedData)
+      return transformResponseData(response.data) as Product
+    } catch (error) {
+      console.error('Error creating product:', error)
+      throw error
+    }
   },
 
   /**
    * Updates an existing product
+   * @param id - Product ID
+   * @param productData - Updated product data
+   * @returns Promise with updated product
    */
-  updateProduct: async (id: number, product: Partial<Product>): Promise<Product> => {
-    const apiProduct = transformProductToApi(product as Product);
-    const response = await api.put(`/products/${id}/`, apiProduct);
-    return transformApiProduct(response.data);
+  updateProduct: async (id: number, productData: ProductFormData): Promise<Product> => {
+    try {
+      const transformedData = transformRequestData(productData as unknown as Record<string, any>)
+      const response = await apiClient.put(`/inventory/products/${id}/`, transformedData)
+      return transformResponseData(response.data) as Product
+    } catch (error) {
+      console.error(`Error updating product ${id}:`, error)
+      throw error
+    }
   },
 
   /**
-   * Deletes a product from the inventory
+   * Deletes a product by ID
+   * @param id - Product ID to delete
+   * @returns Promise with success status
    */
   deleteProduct: async (id: number): Promise<void> => {
-    await api.delete(`/inventory/products/${id}/`);
+    try {
+      await apiClient.delete(`/inventory/products/${id}/`)
+    } catch (error) {
+      console.error(`Error deleting product ${id}:`, error)
+      throw error
+    }
   },
 
   /**
-   * Retrieves products with low stock levels
+   * Fetches all product categories
+   * @returns Promise with list of categories
    */
-  getLowStockProducts: async (): Promise<Product[]> => {
-    const response = await api.get('/products/low-stock/');
-    return response.data.map(transformApiProduct);
-  },
-
-  /**
-   * Retrieves products that are expiring soon
-   */
-  getExpiringProducts: async (): Promise<Product[]> => {
-    const response = await api.get('/products/expiring/');
-    return response.data.map(transformApiProduct);
-  },
-};
-
-export default api;
+  getCategories: async (): Promise<string[]> => {
+    try {
+      const response = await apiClient.get('/inventory/categories/')
+      return response.data
+    } catch (error) {
+      console.error('Error fetching categories:', error)
+      throw error
+    }
+  }
+}

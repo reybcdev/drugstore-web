@@ -1,163 +1,170 @@
-import { useState } from 'react';
-import { Search, Filter, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import type { ProductFiltersOptions } from '../../types/inventory';
+import { useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { ProductFilters } from '../../types/inventory'
+import { inventoryApi } from '../../services/api'
 
 interface ProductFiltersProps {
-  readonly filters: ProductFiltersOptions;
-  readonly onFiltersChange: (filters: ProductFiltersOptions) => void;
+  /** Current filter values */
+  readonly filters: ProductFilters;
+  /** Handler for filter changes */
+  readonly onFilterChange: (filters: ProductFilters) => void;
 }
 
 /**
- * Product filters molecule component for filtering inventory items
+ * Filter controls for the product inventory list
+ * @param props - Component props
+ * @returns Filter UI component
  */
-const ProductFilters: React.FC<ProductFiltersProps> = ({ filters, onFiltersChange }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [supplierTerm, setSupplierTerm] = useState('');
+function ProductFilters({ filters, onFilterChange }: ProductFiltersProps): JSX.Element {
+  // Fetch categories for dropdown
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => inventoryApi.getCategories(),
+    staleTime: 5 * 60 * 1000 // 5 minutes
+  })
 
   /**
-   * Handles search input changes
+   * Handle text search input changes
+   * @param e - Input change event
    */
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    onFiltersChange({
+    onFilterChange({
       ...filters,
-      category: value || undefined,
-    });
-  };
+      searchTerm: e.target.value
+    })
+  }
 
   /**
-   * Handles supplier input changes
+   * Handle category dropdown changes
+   * @param e - Select change event
    */
-  const handleSupplierChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    setSupplierTerm(value);
-    onFiltersChange({
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    onFilterChange({
       ...filters,
-      supplier: value || undefined,
-    });
-  };
+      category: e.target.value
+    })
+  }
 
   /**
-   * Handles filter toggle changes
+   * Handle stock status filter changes
+   * @param e - Select change event
    */
-  const handleFilterToggle = (filterKey: keyof ProductFiltersOptions): void => {
-    onFiltersChange({
+  const handleStockStatusChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    onFilterChange({
       ...filters,
-      [filterKey]: !filters[filterKey],
-    });
-  };
+      stockStatus: e.target.value as 'all' | 'inStock' | 'lowStock' | 'outOfStock'
+    })
+  }
 
   /**
-   * Clears all filters
+   * Handle expiry status filter changes
+   * @param e - Select change event
    */
-  const clearAllFilters = (): void => {
-    setSearchTerm('');
-    setSupplierTerm('');
-    onFiltersChange({
-      category: undefined,
-      supplier: undefined,
-      lowStock: false,
-      expiringSoon: false,
-    });
-  };
+  const handleExpiryStatusChange = (e: React.ChangeEvent<HTMLSelectElement>): void => {
+    onFilterChange({
+      ...filters,
+      expiryStatus: e.target.value as 'all' | 'expired' | 'expiringSoon' | 'valid'
+    })
+  }
 
   /**
-   * Checks if any filters are active
+   * Clear all filters
    */
-  const hasActiveFilters = (): boolean => {
-    return !!(
-      filters.category ||
-      filters.supplier ||
-      filters.lowStock ||
-      filters.expiringSoon
-    );
-  };
-
-  /**
-   * Renders search input field
-   */
-  const renderSearchInput = (
-    label: string,
-    value: string,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void,
-    placeholder: string
-  ) => (
-    <div className="relative">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-      <Input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="pl-10"
-        aria-label={label}
-      />
-    </div>
-  );
-
-  /**
-   * Renders filter toggle button
-   */
-  const renderFilterToggle = (
-    key: keyof ProductFiltersOptions,
-    label: string,
-    isActive: boolean
-  ) => (
-    <Button
-      variant={isActive ? "default" : "outline"}
-      size="sm"
-      onClick={() => handleFilterToggle(key)}
-      aria-pressed={isActive}
-    >
-      {label}
-    </Button>
-  );
+  const handleClearFilters = (): void => {
+    onFilterChange({
+      searchTerm: '',
+      category: '',
+      stockStatus: 'all',
+      expiryStatus: 'all'
+    })
+  }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center">
-          <Filter className="h-5 w-5 text-gray-500 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">Filters</h3>
+    <div className="bg-white p-4 rounded-md shadow-sm border">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Search input */}
+        <div>
+          <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-1">
+            Search
+          </label>
+          <input
+            id="search"
+            type="text"
+            value={filters.searchTerm || ''}
+            onChange={handleSearchChange}
+            placeholder="Search products..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          />
         </div>
-        {hasActiveFilters() && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearAllFilters}
+
+        {/* Category filter */}
+        <div>
+          <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+            Category
+          </label>
+          <select
+            id="category"
+            value={filters.category || ''}
+            onChange={handleCategoryChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
           >
-            <X className="h-4 w-4 mr-1" />
-            Clear all
-          </Button>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {renderSearchInput(
-            'Search by category',
-            searchTerm,
-            handleSearchChange,
-            'Search by category...'
-          )}
-          {renderSearchInput(
-            'Search by supplier',
-            supplierTerm,
-            handleSupplierChange,
-            'Search by supplier...'
-          )}
+            <option value="">All Categories</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {renderFilterToggle('lowStock', 'Low Stock', !!filters.lowStock)}
-          {renderFilterToggle('expiringSoon', 'Expiring Soon', !!filters.expiringSoon)}
+        {/* Stock status filter */}
+        <div>
+          <label htmlFor="stockStatus" className="block text-sm font-medium text-gray-700 mb-1">
+            Stock Status
+          </label>
+          <select
+            id="stockStatus"
+            value={filters.stockStatus || 'all'}
+            onChange={handleStockStatusChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          >
+            <option value="all">All Stock Status</option>
+            <option value="inStock">In Stock</option>
+            <option value="lowStock">Low Stock</option>
+            <option value="outOfStock">Out of Stock</option>
+          </select>
+        </div>
+
+        {/* Expiry status filter */}
+        <div>
+          <label htmlFor="expiryStatus" className="block text-sm font-medium text-gray-700 mb-1">
+            Expiry Status
+          </label>
+          <select
+            id="expiryStatus"
+            value={filters.expiryStatus || 'all'}
+            onChange={handleExpiryStatusChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          >
+            <option value="all">All Expiry Status</option>
+            <option value="valid">Valid</option>
+            <option value="expiringSoon">Expiring Soon</option>
+            <option value="expired">Expired</option>
+          </select>
+        </div>
+
+        {/* Clear filters button */}
+        <div className="flex items-end">
+          <button
+            onClick={handleClearFilters}
+            className="w-full px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md"
+          >
+            Clear Filters
+          </button>
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default ProductFilters;
+export default ProductFilters
