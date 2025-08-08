@@ -1,8 +1,8 @@
 # Drugstore Web
 
-Frontend para la aplicación de gestión de inventario de farmacia desarrollado con React, TypeScript y Vite.
+Frontend for the pharmacy inventory management application built with React, TypeScript and Vite.
 
-## Tecnologías
+## Technologies
 
 - React 19
 - TypeScript
@@ -11,20 +11,20 @@ Frontend para la aplicación de gestión de inventario de farmacia desarrollado 
 - Shadcn UI
 - TanStack Query (React Query)
 - React Hook Form
-- Zustand para gestión de estado
-- Zod para validación
+- Zustand for state management
+- Zod for validation
 
-## Características
+## Features
 
-- Diseño moderno usando Atomic Design
-- Componentes UI reutilizables con Shadcn UI
-- Manejo eficiente de estado con Zustand
-- Validación de formularios con Zod
-- Fetcheo de datos optimizado con TanStack Query
+- Modern design using Atomic Design principles
+- Reusable UI components with Shadcn UI
+- Efficient state management with Zustand
+- Form validation with Zod
+- Optimized data fetching with TanStack Query
 
-## Estructura del proyecto
+## Project Structure
 
-El proyecto sigue la estructura Atomic Design:
+The project follows the Atomic Design structure:
 
 ```
 src/
@@ -39,28 +39,28 @@ src/
   └── types/
 ```
 
-## Instalación
+## Installation
 
 ```bash
-# Instalar dependencias
+# Install dependencies
 npm install
 
-# Iniciar servidor de desarrollo
+# Start development server
 npm run dev
 
-# Construir para producción
+# Build for production
 npm run build
 ```
 
-## Desarrollo
+## Development
 
-La aplicación está conectada a una API backend desarrollada en Django REST Framework.
+The application connects to a backend API built with Django REST Framework.
 
-## Reglas de desarrollo
+## Development Rules
 
-- Usa nombres en kebab-case para archivos
-- Usa PascalCase para componentes y tipos
-- Usa camelCase para variables y funciones
-- Documentación JSDoc para funciones públicas
-- Componentes pequeños y de propósito único
-- Estilo con Tailwind CSS
+- Use kebab-case for file names
+- Use PascalCase for components and types
+- Use camelCase for variables and functions
+- JSDoc documentation for public functions
+- Small, single-purpose components
+- Styling with Tailwind CSS
